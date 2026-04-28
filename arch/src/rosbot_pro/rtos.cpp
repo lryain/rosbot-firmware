@@ -1,0 +1,305 @@
+// Copyright 2024 ROSbot PRO
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "rtos.hpp"
+
+#include <STM32Ethernet.h>
+#include <STM32FreeRTOS.h>
+
+#include "animations/led_animations.hpp"
+#include "battery_interface.hpp"
+#include "communication_manager.hpp"
+#include "config.hpp"
+#include "encoder_array.hpp"
+#include "fan.hpp"
+#include "imu_interface.hpp"
+#include "led_indicator.hpp"
+#include "led_strip.hpp"
+#include "motor_array.hpp"
+#include "ntc.hpp"
+#ifdef USE_WITTYPI5_POWER
+#include "power_board_wp5.hpp"
+#endif
+#include "ros/clients/trigger_client.hpp"
+#include "ros/publishers/battery_publisher.hpp"
+#include "ros/publishers/imu_publisher.hpp"
+#include "ros/publishers/joint_state_publisher.hpp"
+#include "ros/publishers/motor_current_publisher.hpp"
+#include "ros/publishers/motor_stall_publisher.hpp"
+#include "ros/ros_node.hpp"
+
+// ───── Externs ─────
+extern FanController g_fan;
+#ifdef USE_WITTYPI5_POWER
+extern PowerBoardWP5 wp5_power;
+#endif
+
+// ───── Queues ─────
+void createQueues() {
+  battery_queue = xQueueCreate(1, sizeof(BatteryStamped));
+  imu_queue = xQueueCreate(1, sizeof(ImuStamped));
+  joint_state_queue = xQueueCreate(1, sizeof(EncodersStamped));
+  led_strip_queue = xQueueCreate(1, sizeof(LedFrameMsg));
+  motor_current_queue = xQueueCreate(1, sizeof(MotorCurrentStamped));
+  motor_stall_queue   = xQueueCreate(1, sizeof(MotorStallStamped));
+}
+
+// ───── Create all tasks ─────
+void encoderTask(void* p);
+void hwMonitorTask(void* p);
+void imuTask(void* p);
+void ledStripTask(void* p);
+void monitorTask(void* p);
+void motorControlTask(void* p);
+void shutdownTask(void* p);
+void uRosTask(void* p);
+void uRosPingTask(void* p);
+
+TaskConfig tasks[] = {
+    {"Encoder", Priority::CONTROL, Stack::XXS, 500, encoderTask},
+    {"HwMonitor", Priority::OBSERVING, Stack::S, 10, hwMonitorTask},
+    {"Imu", Priority::SENSORS, Stack::M, 100, imuTask},
+    {"LedStrip", Priority::OBSERVING, Stack::S, 25, ledStripTask},
+#ifndef RELEASE
+    {"Monitor", Priority::BLOCKING, Stack::XL, 1, monitorTask},
+#endif
+    {"MotorControl", Priority::CONTROL, Stack::XXS, 200, motorControlTask},
+    {"Shutdown", Priority::OBSERVING, Stack::M, 3, shutdownTask},
+    {"uRos", Priority::COMMUNICATION, Stack::L, 1000, uRosTask},
+    {"uRosPing", Priority::BLOCKING, Stack::XL, 2, uRosPingTask},
+};
+
+TaskHandleWrapper taskHandles[sizeof(tasks) / sizeof(tasks[0])];
+
+void createTasks() {
+  for (size_t i = 0; i < sizeof(tasks) / sizeof(tasks[0]); i++) {
+    taskHandles[i].create(tasks[i]);
+  }
+}
+
+// ───── Task functions ─────
+void encoderTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+  EncodersStamped data = {};
+
+  while (true) {
+    bool connected = rtos_get_timestamp_ns(data.timestamp_ns);
+    g_encoders.update();
+    data.data = g_encoders.getData();
+
+    // Overwrite effort field with real motor current [A] from IPROPI
+    // (encoder_array.getData() has no current info; motors do)
+    if (connected) {
+      const auto mdata = g_motors.getData();
+      for (uint8_t i = 0; i < g_motors.count(); ++i)
+        data.data.effort[i] = mdata.current[i];
+    }
+
+    if (connected) {
+      xQueueOverwrite(joint_state_queue, &data);
+    }
+    vTaskDelayUntil(&wake_time, period);
+  }
+}
+
+void hwMonitorTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+  BatteryStamped data = {};
+  TickType_t last_battery_update = 0;
+
+  while (true) {
+    // LED Indicator
+    bool battery_low = g_battery->isLow();
+    bool error_state = false;
+    g_indicator.update(battery_low, !g_ros_node.isConnected(), error_state);
+
+    if (xTaskGetTickCount() - last_battery_update > pdMS_TO_TICKS(1000)) {
+      // Fan
+      float temp = ntc.readCelsius();
+      g_fan.update(temp);
+
+      // Battery — ADC method (no power board)
+      g_battery->update();
+
+      bool connected = rtos_get_timestamp_ns(data.timestamp_ns);
+      data.data = g_battery->getData();
+      if (connected) {
+        xQueueOverwrite(battery_queue, &data);
+      }
+
+      last_battery_update = xTaskGetTickCount();
+    }
+
+    vTaskDelayUntil(&wake_time, period);
+  }
+}
+
+void imuTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+  ImuStamped data = {};
+
+  while (true) {
+    if (rtos_get_timestamp_ns(data.timestamp_ns)) {
+      g_imu->update();
+      data.data = g_imu->getData();
+
+      xQueueOverwrite(imu_queue, &data);
+      vTaskDelayUntil(&wake_time, period);
+    } else {
+      vTaskDelayUntil(&wake_time, period);
+    }
+  }
+}
+
+void ledStripTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+
+  LedFrameMsg frame;
+  const TickType_t timeout = pdMS_TO_TICKS(LED_STRIP_TIMEOUT_MS);
+  const TickType_t idle_period = pdMS_TO_TICKS(IDLE_ANIMATION_CHANGE_MS);
+  const TickType_t interval = pdMS_TO_TICKS(IDLE_ANIMATION_INTERVAL_MS);
+
+  TickType_t last_msg_time = xTaskGetTickCount();
+  TickType_t last_idle_change = 0;
+  int idle_state = 0;
+  bool reset = true;
+
+  while (true) {
+    TickType_t now = xTaskGetTickCount();
+
+    if (xQueueReceive(led_strip_queue, &frame, 0) == pdTRUE) {
+      g_led_strip.setFromRGB8(frame.rgb_data, frame.pixel_count);
+      g_led_strip.show();
+      last_msg_time = now;
+      idle_state = 0;
+      reset = true;
+    }
+
+    if ((now - last_msg_time) > timeout &&
+        (now - last_idle_change) > idle_period) {
+      if (idle_state == 0) {
+        idleAnimation(g_led_strip, 0xA0, 0xA0, 0xA0, interval, reset);
+        idle_state = 1;
+        reset = false;
+      } else {
+        idleAnimation(g_led_strip, 0xA0, 0x00, 0x00, interval);
+        idle_state = 0;
+      }
+
+      last_idle_change = now;
+    }
+    vTaskDelay(period);
+  }
+}
+
+void monitorTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+  char buf[768];
+
+  while (true) {
+    vTaskGetRunTimeStats(buf);
+    if (g_comm_mgr.hasDebugSerial()) {
+      g_comm_mgr.debugSerial()->printf("\r\n%s\r\n", buf);
+
+      for (size_t i = 0; i < sizeof(taskHandles) / sizeof(taskHandles[0]);
+           i++) {
+        g_comm_mgr.debugSerial()->printf(
+            "%-16s %-6u B\r\n", tasks[i].name,
+            uxTaskGetStackHighWaterMark(taskHandles[i].handle) *
+                sizeof(StackType_t));
+      }
+      g_comm_mgr.debugSerial()->printf("\r\nFree heap memory: %u B\r\n",
+                                       (unsigned)xPortGetFreeHeapSize());
+    }
+
+    vTaskDelayUntil(&wake_time, period);
+  }
+}
+
+void motorControlTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+  MotorCurrentStamped current_data = {};
+  MotorStallStamped   stall_data   = {};
+
+  while (true) {
+    g_motors.update();
+
+    bool connected = rtos_get_timestamp_ns(current_data.timestamp_ns);
+    stall_data.timestamp_ns = current_data.timestamp_ns;
+
+    const auto& mdata = g_motors.getData();
+    stall_data.stall_mask = 0;
+    for (uint8_t i = 0; i < g_motors.count(); ++i) {
+      current_data.current[i] = mdata.current[i];
+      if (mdata.stall[i]) stall_data.stall_mask |= (1u << i);
+    }
+    if (connected) {
+      xQueueOverwrite(motor_current_queue, &current_data);
+      xQueueOverwrite(motor_stall_queue,   &stall_data);
+    }
+
+    vTaskDelayUntil(&wake_time, period);
+  }
+}
+
+void shutdownTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+
+  EthernetClient eth_client;
+  while (true) {
+    if (digitalRead(PB_SHD_DETECT) == HIGH) {
+      // Notify SBC to shut down
+      if (eth_client.connect(AGENT_IP, 3000, 100)) {
+        eth_client.println("GET /shutdown HTTP/1.1");
+        eth_client.stop();
+      }
+
+      // Wait for SBC to complete shutdown
+      vTaskDelay(pdMS_TO_TICKS(SHUTDOWN_WAIT_MS));
+
+      // Confirm shutdown to the power board
+      digitalWrite(PB_SHD_CONFIRM, HIGH);
+
+      // Suspend until power board removes power
+      vTaskSuspend(nullptr);
+    }
+    vTaskDelayUntil(&wake_time, period);
+  }
+}
+
+void uRosTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+
+  while (true) {
+    g_ros_node.spin();
+    vTaskDelay(period);
+  }
+}
+
+void uRosPingTask(void* p) {
+  TickType_t period = taskGetPeriod(p);
+  TickType_t wake_time = xTaskGetTickCount();
+
+  while (true) {
+    g_ros_node.loop();
+    vTaskDelayUntil(&wake_time, period);
+  }
+}

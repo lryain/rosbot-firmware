@@ -1,0 +1,4 @@
+- rosbot_pro build verified with `platformio run -e rosbot_pro`.
+- Final rosbot_pro layout: RR motor on TIM12 (PB14/PB15), fan on TIM8 (PB0 CH2N), LED strip on SPI3 (PC12/PC11/PC10).
+- `USE_WITTYPI5_POWER` uses I2C1 on PB8/PB9; shutdown pins PB_SHD_DETECT/PB_SHD_CONFIRM stay reserved.
+- rosbot_lite build verified with `platformio run -e rosbot_lite` using `ROSBOT_LITE`; no Ethernet libs at runtime, but `STM32Ethernet`/`LwIP` stay as compile-time deps because `micro_ros_arduino` includes `EthernetUdp.h`.
