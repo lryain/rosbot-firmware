@@ -107,8 +107,8 @@ void MotorArray::update() {
       data_.position[i] = d.position;
       data_.velocity[i] = d.velocity;
       data_.effort[i]   = d.effort;
-      data_.current[i]  = d.current;
-      data_.stall[i]    = d.stall;
+      // data_.current[i]  = d.current;
+      // data_.stall[i]    = d.stall;
     }
     xSemaphoreGive(mutex_);
   }

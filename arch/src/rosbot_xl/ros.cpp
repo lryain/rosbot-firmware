@@ -35,10 +35,10 @@
 #include "ros/subscribers/led_subscriber.hpp"
 
 // PUBLISHERS
-static BatteryPublisher s_battery_pub(battery_pub_config);
-static ButtonsPublisher s_buttons_pub(buttons_pub_config);
-static ImuPublisher s_imu_pub(imu_pub_config);
-static JointStatePublisher s_joint_pub(joint_state_pub_config);
+static BatteryPublisher      s_battery_pub(battery_pub_config);
+static ButtonsPublisher      s_buttons_pub(buttons_pub_config);
+static ImuPublisher          s_imu_pub(imu_pub_config);
+static JointStatePublisher   s_joint_pub(joint_state_pub_config);
 
 static std::vector<PublisherInterface*> publishers = {
     &s_battery_pub, &s_buttons_pub, &s_imu_pub, &s_joint_pub};
@@ -46,7 +46,7 @@ uint8_t pub_count = static_cast<uint8_t>(publishers.size());
 
 // SUBSCRIBERS
 
-// Rear Leds subscriber
+// Rear Green LED subscriber
 const LedConfig s_led_configs[] = {
     {.pin = GRN_LED, .bit_mask = 0x01},
 };
@@ -116,7 +116,7 @@ SubscriptionEntry led_strip_sub = {
     .best_effort = true,
 };
 
-// Motors subscriber
+// Motors velocity subscriber
 static std_msgs__msg__Float32MultiArray s_mot_msg = {
     .layout = {},
     .data =

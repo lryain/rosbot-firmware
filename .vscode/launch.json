@@ -11,23 +11,36 @@
         {
             "type": "platformio-debug",
             "request": "launch",
-            "name": "ROSbot Debug",
-            "executable": "/home/aayli/Husarion/Firmware/rosbot-firmware/.pio/build/rosbot/firmware.elf",
+            "name": "PIO Debug",
+            "executable": "d:/ProductionDev/ROS-Devboard-F407/rosbot-firmware/.pio/build/rosbot/firmware.elf",
             "projectEnvName": "rosbot",
-            "toolchainBinDir": "/home/aayli/.platformio/packages/toolchain-gccarmnoneeabi@1.90201.191206/bin",
+            "toolchainBinDir": "C:/Users/lryain/.platformio/packages/toolchain-gccarmnoneeabi@1.90201.191206/bin",
             "internalConsoleOptions": "openOnSessionStart",
-            "svdPath": "/home/aayli/.platformio/platforms/husarion_boards/misc/svd/STM32F40x.svd",
-            "loadMode": "manual"
+            "svdPath": "C:/Users/lryain/.platformio/platforms/husarion_boards/misc/svd/STM32F40x.svd",
+            "preLaunchTask": {
+                "type": "PlatformIO",
+                "task": "Pre-Debug"
+            }
         },
         {
             "type": "platformio-debug",
             "request": "launch",
-            "name": "ROSbot XL Debug",
-            "executable": "/home/aayli/Husarion/Firmware/rosbot-firmware/.pio/build/rosbot_xl/firmware.elf",
-            "projectEnvName": "rosbot_xl",
-            "toolchainBinDir": "/home/aayli/.platformio/packages/toolchain-gccarmnoneeabi@1.90201.191206/bin",
+            "name": "PIO Debug (skip Pre-Debug)",
+            "executable": "d:/ProductionDev/ROS-Devboard-F407/rosbot-firmware/.pio/build/rosbot/firmware.elf",
+            "projectEnvName": "rosbot",
+            "toolchainBinDir": "C:/Users/lryain/.platformio/packages/toolchain-gccarmnoneeabi@1.90201.191206/bin",
             "internalConsoleOptions": "openOnSessionStart",
-            "svdPath": "/home/aayli/.platformio/platforms/husarion_boards/misc/svd/STM32F40x.svd",
+            "svdPath": "C:/Users/lryain/.platformio/platforms/husarion_boards/misc/svd/STM32F40x.svd"
+        },
+        {
+            "type": "platformio-debug",
+            "request": "launch",
+            "name": "PIO Debug (without uploading)",
+            "executable": "d:/ProductionDev/ROS-Devboard-F407/rosbot-firmware/.pio/build/rosbot/firmware.elf",
+            "projectEnvName": "rosbot",
+            "toolchainBinDir": "C:/Users/lryain/.platformio/packages/toolchain-gccarmnoneeabi@1.90201.191206/bin",
+            "internalConsoleOptions": "openOnSessionStart",
+            "svdPath": "C:/Users/lryain/.platformio/platforms/husarion_boards/misc/svd/STM32F40x.svd",
             "loadMode": "manual"
         }
     ]

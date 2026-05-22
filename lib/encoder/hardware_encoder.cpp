@@ -96,7 +96,9 @@ void HardwareEncoder::init() {
   timer_handle_->Instance = cfg_.timer;
   timer_handle_->Init.Prescaler = 0;
   timer_handle_->Init.CounterMode = TIM_COUNTERMODE_UP;
-  timer_handle_->Init.Period = CNT_MAX;
+  // Set period based on timer bit-width (16-bit or 32-bit)
+  timer_handle_->Init.Period = (cfg_.timer == TIM2 || cfg_.timer == TIM5) 
+                                ? CNT_MAX_32BIT : CNT_MAX_16BIT;
   timer_handle_->Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   timer_handle_->Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 
@@ -115,6 +117,9 @@ void HardwareEncoder::init() {
   HAL_TIM_Encoder_Init(timer_handle_, &encoder_cfg_);
   HAL_TIM_Encoder_Start(timer_handle_, TIM_CHANNEL_ALL);
 
+  // Detect if this is a 32-bit timer (TIM2 or TIM5)
+  is_32bit_timer_ = (cfg_.timer == TIM2 || cfg_.timer == TIM5);
+
   reset();
 }
 
@@ -132,7 +137,7 @@ void HardwareEncoder::update() {
 
   if (dt_us >= MIN_DT_US) {
     const uint32_t cnt = getTicks();
-    int32_t delta = compute_delta(cnt, last_cnt_);
+    int32_t delta = compute_delta(cnt, last_cnt_, is_32bit_timer_);
 
     float delta_pos = static_cast<float>(delta) * cfg_.rad_per_tick;
     data_.position += delta_pos;
@@ -147,14 +152,17 @@ void HardwareEncoder::update() {
   }
 }
 
-inline int32_t HardwareEncoder::compute_delta(uint32_t cnt, uint32_t last_cnt) {
+inline int32_t HardwareEncoder::compute_delta(uint32_t cnt, uint32_t last_cnt, bool is_32bit) {
   int32_t delta = static_cast<int32_t>(cnt - last_cnt);
 
-  // Wrap-around detection (dla 16-bit timer)
-  if (delta > CNT_HALF)
-    delta -= (CNT_MAX + 1);
-  else if (delta < -CNT_HALF)
-    delta += (CNT_MAX + 1);
+  // Wrap-around detection (supports both 16-bit and 32-bit timers)
+  const int32_t cnt_half = is_32bit ? CNT_HALF_32BIT : CNT_HALF_16BIT;
+  const uint32_t cnt_max = is_32bit ? CNT_MAX_32BIT : CNT_MAX_16BIT;
+  
+  if (delta > cnt_half)
+    delta -= (cnt_max + 1);
+  else if (delta < -cnt_half)
+    delta += (cnt_max + 1);
 
   return delta;
 }

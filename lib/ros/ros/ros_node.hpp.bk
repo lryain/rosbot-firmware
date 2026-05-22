@@ -15,7 +15,6 @@
 #pragma once
 
 #include <HardwareSerial.h>
-#include <STM32FreeRTOS.h>
 #include <micro_ros_arduino.h>
 #include <rcl/rcl.h>
 #include <rclc/executor.h>
@@ -28,6 +27,15 @@
 #include "types.hpp"
 
 #define RC_CHECK(fn)                                                  \
+  {                                                                   \
+    rcl_ret_t rc = fn;                                                \
+    if (rc != RCL_RET_OK) {                                           \
+      log("[ERROR] %s:%d failed with rc=%d", __FILE__, __LINE__, rc); \
+      return false;                                                   \
+    }                                                                 \
+  }
+
+#define RC_CHECK_VOID(fn)                                              \
   {                                                                   \
     rcl_ret_t rc = fn;                                                \
     if (rc != RCL_RET_OK) {                                           \
@@ -55,7 +63,6 @@ struct RosNodeConfig {
   uint32_t timer_ms = 10;
   uint8_t ping_attempts = 3;
   uint16_t ping_timeout_ms = 50;
-  uint32_t ping_watchdog_ms = 1000;  // Ping interval in ms
 };
 
 class RosNode {
@@ -107,6 +114,16 @@ class RosNode {
   const char* ns_ = {};
   HardwareSerial* serial_ = nullptr;
 
+  // Ping fault tolerance: allow N consecutive ping failures before disconnecting
+  // static constexpr uint8_t MAX_PING_FAILS = 5;
+  // uint8_t ping_fail_count_ = 0;
+
+  // // Reconnection tracking: if we reconnect too many times, heap is likely
+  // // too fragmented to continue — perform a software reset to recover.
+  // static constexpr uint8_t MAX_RECONNECT_ATTEMPTS = 5;
+  // static constexpr size_t MIN_FREE_HEAP_BYTES = 8192;  // 8 KB safety margin
+  // uint8_t reconnect_count_ = 0;
+
   // ROS2 internals
   rcl_allocator_t allocator_ = {};
   rclc_executor_t executor_ = {};
@@ -115,10 +132,6 @@ class RosNode {
   rclc_support_t support_ = {};
   rcl_timer_t timer_ = {};
   static RosNode* instance_;  // wskaźnik na aktywną instancję
-
-  // Ping watchdog
-  TickType_t last_ping_ = 0;
-  bool ping_ = false;
 };
 
 /// Global ROS node — defined in board-specific ros_entities.cpp

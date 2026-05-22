@@ -18,8 +18,6 @@
 #include "ros/publishers/buttons_publisher.hpp"
 #include "ros/publishers/imu_publisher.hpp"
 #include "ros/publishers/joint_state_publisher.hpp"
-#include "ros/publishers/motor_current_publisher.hpp"
-#include "ros/publishers/motor_stall_publisher.hpp"
 #include "transport/spi_transport.hpp"
 
 inline constexpr uint32_t ADC_MAX_VALUE = 1023;
@@ -368,15 +366,15 @@ inline constexpr JointStatePublisherConfig joint_state_pub_config = {
     .frame_id = "base_link",
 };
 
-inline constexpr MotorCurrentPublisherConfig motor_current_pub_config = {
-    .topic = "_motors/current",
-    .queue = motor_current_queue,
-};
+// inline constexpr MotorCurrentPublisherConfig motor_current_pub_config = {
+//     .topic = "_motors/current",
+//     .queue = motor_current_queue,
+// };
 
-inline constexpr MotorStallPublisherConfig motor_stall_pub_config = {
-    .topic = "_motors/stall",
-    .queue = motor_stall_queue,
-};
+// inline constexpr MotorStallPublisherConfig motor_stall_pub_config = {
+//     .topic = "_motors/stall",
+//     .queue = motor_stall_queue,
+// };
 
 inline constexpr SerialConfig SBC_SERIAL_CONFIG = {
     .serial = &Serial1,

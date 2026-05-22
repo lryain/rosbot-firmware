@@ -43,7 +43,7 @@ class HardwareEncoder : public EncoderInterface {
     float filtered = cfg_.alpha * input + (1.0f - cfg_.alpha) * prev;
     return fabs(filtered) > ZERO_THRESHOLD ? filtered : 0.0f;
   }
-  static inline int32_t compute_delta(uint32_t cnt, uint32_t last_cnt);
+  static inline int32_t compute_delta(uint32_t cnt, uint32_t last_cnt, bool is_32bit);
 
   HardwareEncoderConfig cfg_ = {};
   TIM_HandleTypeDef* timer_handle_ = nullptr;
@@ -51,10 +51,14 @@ class HardwareEncoder : public EncoderInterface {
   uint32_t last_cnt_ = 0;
   uint32_t last_time_us_ = 0;
   float last_velocity_ = 0.0f;
+  bool is_32bit_timer_ = false;  // true for TIM2/TIM5 (32-bit timers)
 
-  // Below value are true for 16-bit timers (TIM2/TIM5 (32-bit) not supported)
-  static constexpr uint32_t CNT_MAX = 0xFFFF;
-  static constexpr int32_t CNT_HALF = 0x8000;
+  // Timer counter max value (16-bit or 32-bit)
+  static constexpr uint32_t CNT_MAX_16BIT = 0xFFFF;
+  static constexpr uint32_t CNT_MAX_32BIT = 0xFFFFFFFF;
+  static constexpr int32_t CNT_HALF_16BIT = 0x8000;
+  static constexpr int32_t CNT_HALF_32BIT = 0x80000000;
+  
   static constexpr uint32_t MIN_DT_US = 100;
   static constexpr float ZERO_THRESHOLD = 0.01f;  // rad/s
   static constexpr float US_TO_SEC = 1.0f / 1000000.0f;

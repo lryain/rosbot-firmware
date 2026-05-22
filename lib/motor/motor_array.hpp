@@ -32,8 +32,8 @@ struct MotorsData {
   float   position[MAX_NUM_MOTORS] = {};
   float   velocity[MAX_NUM_MOTORS] = {};
   float   effort[MAX_NUM_MOTORS]   = {};
-  float   current[MAX_NUM_MOTORS]  = {};  // [A] phase current from IPROPI
-  bool    stall[MAX_NUM_MOTORS]    = {};  // stall / overcurrent detected
+  // float   current[MAX_NUM_MOTORS]  = {};  // [A] phase current from IPROPI
+  // bool    stall[MAX_NUM_MOTORS]    = {};  // stall / overcurrent detected
   uint8_t count = 0;
 };
 

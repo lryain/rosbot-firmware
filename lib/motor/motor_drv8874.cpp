@@ -15,6 +15,11 @@
 #include "motor_drv8874.hpp"
 
 void MotorDrv8874::init() {
+  // Initialize encoder first (if present)
+  if (encoder_) {
+    encoder_->init();
+  }
+
   // Resolve PinNames: use explicit ALT override when provided to avoid
   // conflicts with encoder timers (TIM1-TIM4 PRIMARY entries in PinMap_PWM).
   PinName in1_pn = (cfg_.in1_pname != NC) ? cfg_.in1_pname
@@ -41,6 +46,14 @@ void MotorDrv8874::init() {
 
   pwm_arr_ = pwm_timer_1_->getOverflow(TICK_FORMAT);
 
+  // ✅ 修复：强制设置初始模式，绕过去重检查
+  current_mode_ = MotorMode8874::COAST_8874;  // 先设为COAST
+  // 然后强制切换到BRAKE（因为COAST无法仅靠IN1/IN2实现）
+  // IN1=LOW, IN2=LOW = 低侧制动，这是上电最安全的状态
+  pwm_timer_1_->setCaptureCompare(pwm_channel_1_, 0);
+  pwm_timer_2_->setCaptureCompare(pwm_channel_2_, 0);
+  current_mode_ = MotorMode8874::BRAKE_8874;  // 记录实际状态
+  
   setMode(MotorMode8874::COAST_8874);
 }
 
@@ -140,6 +153,11 @@ void MotorDrv8874::brake() {
 }
 
 void MotorDrv8874::update(float dt, bool move) {
+  // --- Step 0: Update encoder (must be called first to get fresh data) ---
+  if (encoder_) {
+    encoder_->update();
+  }
+
   // --- Step 1: Sample IPROPI (always, even when stopped, for accurate monitoring) ---
   if (cfg_.ipropi_pin != 0xFF) {
     constexpr float kAlpha = 0.1f;  // IIR low-pass: τ≈47ms @ 200Hz, reduces ADC noise for stall/OCP

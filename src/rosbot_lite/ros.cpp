@@ -32,8 +32,6 @@
 #include "ros/publishers/buttons_publisher.hpp"
 #include "ros/publishers/imu_publisher.hpp"
 #include "ros/publishers/joint_state_publisher.hpp"
-#include "ros/publishers/motor_current_publisher.hpp"
-#include "ros/publishers/motor_stall_publisher.hpp"
 #include "ros/subscribers/led_subscriber.hpp"
 
 // PUBLISHERS
@@ -41,12 +39,10 @@ static BatteryPublisher      s_battery_pub(battery_pub_config);
 static ButtonsPublisher      s_buttons_pub(buttons_pub_config);
 static ImuPublisher          s_imu_pub(imu_pub_config);
 static JointStatePublisher   s_joint_pub(joint_state_pub_config);
-static MotorCurrentPublisher s_motor_current_pub(motor_current_pub_config);
-static MotorStallPublisher   s_motor_stall_pub(motor_stall_pub_config);
+// static MotorCurrentPublisher s_motor_current_pub(motor_current_pub_config);
+// static MotorStallPublisher   s_motor_stall_pub(motor_stall_pub_config);
 
-static std::vector<PublisherInterface*> publishers = {
-    &s_battery_pub, &s_buttons_pub, &s_imu_pub, &s_joint_pub,
-    &s_motor_current_pub, &s_motor_stall_pub};
+static std::vector<PublisherInterface*> publishers = {&s_battery_pub, &s_buttons_pub, &s_imu_pub, &s_joint_pub};
 uint8_t pub_count = static_cast<uint8_t>(publishers.size());
 
 // SUBSCRIBERS

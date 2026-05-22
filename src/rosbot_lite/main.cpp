@@ -1,4 +1,4 @@
-// Copyright 2022 Husarion sp. z o.o.
+// Copyright 2024 ROSbot Lite
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@
 
 #include <Arduino.h>
 
+#include "battery_adc.hpp"
 #include "battery_interface.hpp"
 #include "communication_manager.hpp"
 #include "config.hpp"
-#include "encoder_array.hpp"
 #include "hardware_encoder.hpp"
 #include "imu_bno055.hpp"
 #include "led_indicator.hpp"
 #include "led_strip.hpp"
 #include "motor_array.hpp"
-#include "motor_drv8848.hpp"
+#include "motor_drv8874.hpp"
 #include "power_board.hpp"
 #include "ros/ros_node.hpp"
 #include "rtos.hpp"
@@ -31,13 +31,14 @@
 // ───────── Board Revision ─────────
 static BoardRevision board_revision(board_revision_config);
 
+// ───────── Battery (ADC) ─────────
+static BatteryAdc battery_adc(battery_adc_config);
+
 // ───────── Encoders ─────────
 static HardwareEncoder enc_fl(enc_fl_config);
 static HardwareEncoder enc_fr(enc_fr_config);
 static HardwareEncoder enc_rl(enc_rl_config);
 static HardwareEncoder enc_rr(enc_rr_config);
-static EncoderInterface* encoders[] = {&enc_fl, &enc_fr, &enc_rl, &enc_rr};
-static constexpr uint8_t ENCODER_COUNT = sizeof(encoders) / sizeof(encoders[0]);
 
 // ───────── Fan ─────────
 FanController g_fan;
@@ -48,15 +49,14 @@ static ImuBno055 imu_bno055(imu_bno055_config);
 // ───────── LED Strip ─────────
 static SpiTransport s_transport(spi_config);
 
-// ───────── Motors (compatible with MAX22205) ─────────
-// TODO: Can be improved and used tourque control
-static MotorDrv8848 motor_fl(motor_fl_config, &enc_fl,
+// ───────── Motors (DRV8874 IN/IN mode) ─────────
+static MotorDrv8874 motor_fl(motor_fl_config, &enc_fl,
                              PIDController(pid_config));
-static MotorDrv8848 motor_fr(motor_fr_config, &enc_fr,
+static MotorDrv8874 motor_fr(motor_fr_config, &enc_fr,
                              PIDController(pid_config));
-static MotorDrv8848 motor_rl(motor_rl_config, &enc_rl,
+static MotorDrv8874 motor_rl(motor_rl_config, &enc_rl,
                              PIDController(pid_config));
-static MotorDrv8848 motor_rr(motor_rr_config, &enc_rr,
+static MotorDrv8874 motor_rr(motor_rr_config, &enc_rr,
                              PIDController(pid_config));
 static MotorInterface* motors[] = {&motor_fl, &motor_fr, &motor_rl, &motor_rr};
 static constexpr uint8_t MOTOR_COUNT = sizeof(motors) / sizeof(motors[0]);
@@ -64,11 +64,10 @@ static constexpr uint8_t DRIVER_GROUP_COUNT =
     sizeof(driver_groups) / sizeof(driver_groups[0]);
 
 // ───────── Power Board ─────────
-PowerBoard power_board(power_board_config);
+// PowerBoard power_board(power_board_config);
 
 // ─────────Extern variables─────────
-BatteryInterface* g_battery = &power_board;
-EncoderArray g_encoders(encoders, ENCODER_COUNT);
+BatteryInterface* g_battery = &battery_adc;
 ImuInterface* g_imu = &imu_bno055;
 LedIndicator g_indicator(led_status_config);
 LedStrip g_led_strip;
@@ -78,11 +77,17 @@ bool useAlt() { return digitalRead(PUSH_BUTTON1) == LOW; }
 
 void confirmAlt() { digitalWrite(GRN_LED, HIGH); }
 
+// ─────────────────────────────────────────────────────────────────
+// Serial-only transport (no Ethernet — VET6 silicon has no ETH MAC)
+//   Primary:    SBC_SERIAL_CONFIG   (USART1, PA9/PA10) → SBC / micro-ROS host
+//   Diagnostic: DIAGNOSTIC_SERIAL_CONFIG (USART3, PD8/PD9) → debug FTDI
+// ─────────────────────────────────────────────────────────────────
 CommunicationManagerConfig communication_config = {
-    .primary_type = TransportType::kEthernet,
-    .diagnostic_serial = DIAGNOSTIC_SERIAL_CONFIG,
+    .primary_type          = TransportType::kSerial,
+    .primary_serial        = SBC_SERIAL_CONFIG,
+    .diagnostic_serial     = DIAGNOSTIC_SERIAL_CONFIG,
     .useDiagnosticCondition = useAlt,
-    .onDiagnosticSelected = confirmAlt};
+    .onDiagnosticSelected  = confirmAlt};
 
 CommunicationManager g_comm_mgr(communication_config);
 
@@ -94,10 +99,6 @@ void boardPheripheralsInit() {
   // User buttons
   pinMode(PUSH_BUTTON1, INPUT_PULLUP);
   pinMode(PUSH_BUTTON2, INPUT_PULLUP);
-
-  // Fan
-  pinMode(FAN_PP_PIN, OUTPUT);
-  digitalWrite(FAN_PP_PIN, LOW);
 
   // Status LEDs
   pinMode(RED_LED, OUTPUT);
@@ -122,22 +123,21 @@ void boardPheripheralsInit() {
 
 void setMaxMotorsCurrent(Revision rev) {
   switch (rev) {
+    // TODO: implement current limit for DRV8874
     case Revision::V1_2:
-      pinMode(ILIM1, INPUT);
-      pinMode(ILIM2, INPUT);
-      pinMode(ILIM3, INPUT);
-      pinMode(ILIM4, INPUT);
-      break;
-
-    case Revision::V1_1:
-      pinMode(ILIM1, OUTPUT);
-      pinMode(ILIM2, OUTPUT);
-      pinMode(ILIM3, OUTPUT);
-      pinMode(ILIM4, OUTPUT);
-      digitalWrite(ILIM1, HIGH);
-      digitalWrite(ILIM2, HIGH);
-      digitalWrite(ILIM3, HIGH);
-      digitalWrite(ILIM4, HIGH);
+      // pinMode(ILIM1, OUTPUT);
+      // pinMode(ILIM2, OUTPUT);
+      // pinMode(ILIM3, OUTPUT);
+      // pinMode(ILIM4, OUTPUT);
+      // digitalWrite(ILIM1, HIGH);
+      // digitalWrite(ILIM2, HIGH);
+      // digitalWrite(ILIM3, HIGH);
+      // digitalWrite(ILIM4, HIGH);
+      // // V1_1 uses DRV8870 do not have a real current sensor.
+      // motor_fl.disableCurrentSensor();
+      // motor_fr.disableCurrentSensor();
+      // motor_rl.disableCurrentSensor();
+      // motor_rr.disableCurrentSensor();
       break;
 
     default:
@@ -159,27 +159,21 @@ void setup() {
   board_revision.init();
   auto rev = board_revision.revision();
   setMaxMotorsCurrent(rev);
-  auto fan_config =
-      (rev == Revision::V1_1) ? rev1_1_fan_config : rev1_2_fan_config;
 
-  // Components initialization
-  Ethernet.begin(MAC, CLIENT_IP);
-  g_encoders.init();
+  // Peripheral initialisation
+  battery_adc.init();
   ntc.init();
   g_fan.init(fan_config);
   imu_bno055.init();
   g_indicator.init();
   g_led_strip.init(strip_config, &s_transport);
   g_motors.init();
-  power_board.init();
-  if (g_comm_mgr.isSerialTransport()) {
-    g_ros_node.serialTransportInit(*transport);
-  } else {
-    g_ros_node.ethernetTransportInit(AGENT_IP, AGENT_PORT);
-  }
+
+  // Serial micro-ROS transport (only mode available on Lite)
+  g_ros_node.serialTransportInit(*transport);
   g_ros_node.setDiagnosticSerial(g_comm_mgr.debugSerial());
 
-  // RTOS
+  // RTOS scheduler
   createQueues();
   createTasks();
   vTaskStartScheduler();
@@ -189,12 +183,14 @@ void setup() {
 void loop() {}
 
 /*───────── Runtime stats ─────────*/
+// TIM5: 32-bit general-purpose timer on APB1 (84 MHz timer clock).
+// Prescaler 840 → 100 kHz (10 µs/tick), sufficient for FreeRTOS runtime stats.
 HardwareTimer RunTimeStatsTimer(TIM5);
 
 void vConfigureTimerForRunTimeStats(void) {
   RunTimeStatsTimer.setPrescaleFactor(
       1680);  // every 10 µs (168MHz / 1680 = 100kHz)
-  RunTimeStatsTimer.setOverflow(0xFFFFFFFF);
+  RunTimeStatsTimer.setOverflow(0xFFFFFFFF);  // 32-bit max
   RunTimeStatsTimer.refresh();
   RunTimeStatsTimer.resume();
 }
