@@ -18,6 +18,10 @@
 #include "rosbot/config.hpp"
 #elif defined(ROSBOT_XL)
 #include "rosbot_xl/config.hpp"
+#elif defined(ROSBOT_LITE)
+#include "rosbot_lite/config.hpp"
+#elif defined(ROSBOT_PRO)
+#include "rosbot_pro/config.hpp"
 #else
 #error "No board version defined! Did you set correct flag in platformio.ini?"
 #endif

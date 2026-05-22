@@ -129,11 +129,13 @@ extern char _Min_Stack_Size; /* Defined in the linker script */
 #define configSUPPORT_DYNAMIC_ALLOCATION 1
 // #define configSUPPORT_STATIC_ALLOCATION 1
 
+#if configGENERATE_RUN_TIME_STATS
 extern void vConfigureTimerForRunTimeStats(void);
 extern uint32_t vGetTimerValueForRunTimeStats(void);
 #define portCONFIGURE_TIMER_FOR_RUN_TIME_STATS() \
   vConfigureTimerForRunTimeStats()
 #define portGET_RUN_TIME_COUNTER_VALUE() vGetTimerValueForRunTimeStats()
+#endif
 
 /*
  * If configUSE_NEWLIB_REENTRANT is set to 1 then a newlib reent structure

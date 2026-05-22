@@ -80,14 +80,15 @@ class JointStatePublisher : public PublisherInterface {
   }
 
   void fillMsg(const EncodersStamped& d) {
-    msg_.header.stamp.sec = d.timestamp_ns / 1000000000LL;
+    msg_.header.stamp.sec     = d.timestamp_ns / 1000000000LL;
     msg_.header.stamp.nanosec = d.timestamp_ns % 1000000000LL;
 
-    const uint8_t n = g_motors.count();
+    const uint8_t n      = g_motors.count();
+    const auto    mdata  = g_motors.getData();   // contains current[i] from IPROPI
     for (uint8_t i = 0; i < n; ++i) {
       msg_.position.data[i] = d.data.position[i];
       msg_.velocity.data[i] = d.data.velocity[i];
-      msg_.effort.data[i] = d.data.effort[i];
+      msg_.effort.data[i]   = mdata.current[i];  // [A] real motor current, not PWM duty
     }
   }
 };

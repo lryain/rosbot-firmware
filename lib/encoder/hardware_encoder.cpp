@@ -47,6 +47,12 @@ static void enableGpioClock(GPIO_TypeDef* port) {
     __HAL_RCC_GPIOC_CLK_ENABLE();
   else if (port == GPIOD)
     __HAL_RCC_GPIOD_CLK_ENABLE();
+  else if (port == GPIOE)
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+  else if (port == GPIOF)
+    __HAL_RCC_GPIOF_CLK_ENABLE();
+  else if (port == GPIOG)
+    __HAL_RCC_GPIOG_CLK_ENABLE();
 }
 
 static uint8_t timerAF(TIM_TypeDef* tim) {

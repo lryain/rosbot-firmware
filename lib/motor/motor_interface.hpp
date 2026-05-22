@@ -19,8 +19,10 @@
 struct MotorData {
   float position = 0.0f;         // [rad]
   float velocity = 0.0f;         // [rad/s]
-  float effort = 0.0f;           // [Nm]
+  float effort = 0.0f;           // normalized PWM [-1, 1]
   float target_velocity = 0.0f;  // [rad/s]
+  float current = 0.0f;          // [A] motor phase current via IPROPI
+  bool  stall = false;           // stall detected (OCP + low velocity)
 };
 
 class MotorInterface {
